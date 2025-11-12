@@ -86,13 +86,8 @@ VS Code -> Full editor features -> Live sync to Visio -> Automatic Git tracking
 - **Python 3.8+**
 - **Microsoft Visio** (any version with VBA support)
 
-### Install from PyPI (recommended)
 
-```bash
-pip install visiowings
-```
-
-### Install from GitHub
+### Install from GitHub (recommended)
 
 ```bash
 pip install git+https://github.com/twobeass/visiowings.git
