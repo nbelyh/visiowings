@@ -11,36 +11,30 @@ from .document_manager import VisioDocumentManager
 class VisioVBAImporter:
     """Importiert VBA-Module in Visio-Dokumente, optional mit force für Document-Module"""
     
-    def __init__(self, visio_file_path, force_document=False, debug=False):
+    def __init__(self, visio_file_path, force_document=False, debug=False, silent_reconnect=False):
         self.visio_file_path = visio_file_path
         self.visio_app = None
         self.doc = None
         self.force_document = force_document
         self.debug = debug
+        self.silent_reconnect = silent_reconnect  # Neu: unterdrückt Output bei expected reconnects
         self.doc_manager = None
         self.document_map = {}  # Maps folder_name -> VisioDocumentInfo
 
     def connect_to_visio(self):
         """Verbindet sich mit bereits geöffnetem Dokument und entdeckt alle Dokumente"""
         try:
-            # Use DocumentManager for multi-document support
             self.doc_manager = VisioDocumentManager(self.visio_file_path, debug=self.debug)
-            
             if not self.doc_manager.connect_to_visio():
-                return False
-            
+                return False            
             self.visio_app = self.doc_manager.visio_app
             self.doc = self.doc_manager.main_doc
-            
             # Build document map (folder_name -> document)
             for doc_info in self.doc_manager.get_all_documents_with_vba():
                 self.document_map[doc_info.folder_name] = doc_info
-            
             if self.debug:
                 print(f"[DEBUG] Dokument-Map erstellt: {list(self.document_map.keys())}")
-            
             return True
-        
         except Exception as e:
             print(f"❌ Fehler beim Verbinden: {e}")
             if self.debug:
@@ -52,118 +46,73 @@ class VisioVBAImporter:
     def _ensure_connection(self):
         """Stellt sicher, dass die Verbindung zum Dokument noch aktiv ist"""
         try:
-            # Test if document is still accessible
             _ = self.doc.Name
-            # Connection is OK - no output needed to avoid spam
             return True
         except Exception:
-            if self.debug:
+            # Nur Nachricht wenn NICHT silent_reconnect
+            if self.debug and not self.silent_reconnect:
                 print("[DEBUG] Verbindung verloren, versuche neu zu verbinden...")
-            else:
+            elif not self.debug and not self.silent_reconnect:
                 print("🔄 Verbindung verloren, versuche neu zu verbinden...")
             return self.connect_to_visio()
     
     def _strip_vba_header(self, code):
-        """Entfernt den VBA-Header aus exportierten .cls/.bas-Dateien"""
         lines = code.splitlines()
         code_start = 0
-        
-        # VBA metadata patterns
         vba_header_pattern = re.compile(r'^(VERSION|Begin|End|Attribute |MultiUse)')
-        
-        # Find first line of actual code
         for i, line in enumerate(lines):
             stripped = line.strip()
-            
-            # Skip empty lines and comments at the start
             if not stripped or stripped.startswith("'"):
                 continue
-            
-            # Skip VBA metadata lines
             if vba_header_pattern.match(line):
                 continue
-            
-            # Found actual code
             code_start = i
             break
-        
         result = '\n'.join(lines[code_start:])
-        
         if self.debug and code_start > 0:
             print(f"[DEBUG] {code_start} Header-Zeilen beim Import entfernt")
-        
         return result
-    
+
     def _find_document_for_file(self, file_path):
-        """Find which document owns this file based on directory structure
-        
-        Args:
-            file_path: Path object to the VBA file
-        
-        Returns:
-            VisioDocumentInfo or None if not found
-        """
-        # Check if file is in a subdirectory
         parent_dir = file_path.parent.name
-        
-        # If parent directory matches a document folder name, use that document
         if parent_dir in self.document_map:
             if self.debug:
                 print(f"[DEBUG] Datei {file_path.name} gehört zu Dokument: {parent_dir}")
             return self.document_map[parent_dir]
-        
-        # Otherwise, use main document (backward compatibility)
         main_doc_info = self.doc_manager.get_main_document()
         if self.debug:
             print(f"[DEBUG] Datei {file_path.name} wird Hauptdokument zugeordnet")
         return main_doc_info
 
     def import_module(self, file_path):
-        """Importiert ein einzelnes VBA-Modul, überschreibt Document-Module falls 'force'"""
-        
         # Verbindung vor jedem Import prüfen
         if not self._ensure_connection():
             print("⚠️  Keine Verbindung zu Visio - stelle sicher, dass das Dokument geöffnet ist")
             return False
-        
         try:
             file_path = Path(file_path)
-            
-            # Find target document for this file
             target_doc_info = self._find_document_for_file(file_path)
             if not target_doc_info:
                 print(f"⚠️  Kein passendes Dokument für {file_path.name} gefunden")
                 return False
-            
             vb_project = target_doc_info.doc.VBProject
             module_name = file_path.stem
-            
             if self.debug:
                 print(f"[DEBUG] Importiere {file_path.name} in {target_doc_info.name}")
-            
-            # Find existing component with same name
             component = None
             for comp in vb_project.VBComponents:
                 if comp.Name == module_name:
                     component = comp
                     break
-            
-            # Document Module handling (Type 100)
-            if component and component.Type == 100:  # vbext_ct_Document
+            if component and component.Type == 100:
                 if self.force_document:
                     code = file_path.read_text(encoding="utf-8")
                     code = self._strip_vba_header(code)
-                    
                     cm = component.CodeModule
-                    
-                    # Delete all existing lines
                     if cm.CountOfLines > 0:
                         cm.DeleteLines(1, cm.CountOfLines)
-                    
-                    # Add new code
-                    if code.strip():  # Only add if there's actual code
+                    if code.strip():
                         cm.AddFromString(code)
-                    
                     print(f"✓ Importiert: {target_doc_info.folder_name}/{file_path.name} (force)")
                     return True
                 else:
@@ -171,25 +120,18 @@ class VisioVBAImporter:
                     if self.debug:
                         print("[DEBUG] Verwende --force um Document-Module zu überschreiben")
                     return False
-            
-            # Standard module or class module (Type 1, 2, 3)
             if component:
                 if self.debug:
                     print(f"[DEBUG] Entferne existierendes Modul: {module_name}")
                 vb_project.VBComponents.Remove(component)
-            
-            # Import the module
             vb_project.VBComponents.Import(str(file_path))
             print(f"✓ Importiert: {target_doc_info.folder_name}/{file_path.name}")
             return True
-        
         except Exception as e:
             print(f"✗ Fehler beim Importieren von {file_path.name}: {e}")
             if self.debug:
                 import traceback
                 traceback.print_exc()
             return False
-    
     def get_document_folders(self):
-        """Get list of document folder names for file watching"""
         return list(self.document_map.keys())
