@@ -16,6 +16,45 @@
 - 🚀 All your favorite keyboard shortcuts (Ctrl+/, Shift+Alt+Arrow, etc.)
 - 🐛 **Debug mode** for troubleshooting
 
+## Multi-Document Support
+
+- visiowings can sync VBA code from multiple open Visio files: drawings (`.vsdx`, `.vsdm`), stencils (`.vssm`, `.vssx`), and templates (`.vstm`, `.vstx`).
+- Each Visio file with VBA code is exported to its own subfolder under your chosen project directory.
+
+### Example Structure
+
+```
+my_project/
+├── drawing.vsdx
+├── mystencil.vssm
+└── vba_modules/
+    ├── drawing/
+    │   └── Module1.bas
+    └── mystencil/
+        ├── ThisDocument.cls
+        └── StencilHelpers.bas
+```
+
+### How It Works
+
+- **Automatic detection:** Any open Visio document with VBA code will be picked up.
+- **Seamless import/export:** When you save code in VS Code, changes go instantly back to the correct Visio file. If you edit VBA in Visio, changes will sync back to the right file in VS Code on the next polling interval.
+- **Subfolder matching:** During import, files in `vba_modules/drawing/` are synced back to the matching open Visio file named “drawing”.
+
+### Quick Start for Multiple Documents
+
+1. Open all relevant Visio documents (drawings, stencils, templates).
+2. Run:
+   ```
+   visiowings edit --file your_main_document.vsdx --bidirectional --force
+   ```
+3. Edit your VBA files in VS Code. Changes always sync back to their matching Visio document.
+
+### Notes
+
+- If only one document with VBA code is open, all modules appear in a single subfolder.
+- File/folder names are sanitized to avoid issues with special characters or spaces.
+
 ## Why visiowings?
 
 The Visio VBA editor lacks modern features that developers expect. **visiowings** brings the power of VS Code to Visio development:
