@@ -56,6 +56,6 @@ jobs:
       run: |
         visiowings --help
     
-    - name: Import package
+    - name: Test package import
       run: |
-        python -c "import visiowings; print(f'visiowings version: {visiowings.__version__}')"
+        python -c "import visiowings; from visiowings import VisioVBAExporter, VisioVBAImporter, VBAWatcher"
