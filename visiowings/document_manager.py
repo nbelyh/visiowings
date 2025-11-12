@@ -94,22 +94,22 @@ class VisioDocumentManager:
                     break
             
             if not main_doc_found:
-                print(f"⚠️  Hauptdokument nicht geöffnet: {self.main_file_path}")
-                print("   Bitte öffne das Dokument in Visio.")
+                print(f"⚠️  Main document not open: {self.main_file_path}")
+                print("   Please open the document in Visio.")
                 return False
             
             # Discover all open documents
             self._discover_documents()
             
             if self.debug:
-                print(f"[DEBUG] Gefundene Dokumente: {len(self.documents)}")
+                print(f"[DEBUG] Documents found: {len(self.documents)}")
                 for doc_info in self.documents:
                     print(f"[DEBUG]   - {doc_info}")
             
             return True
         
         except Exception as e:
-            print(f"❌ Fehler beim Verbinden mit Visio: {e}")
+            print(f"❌ Error connecting to Visio: {e}")
             if self.debug:
                 import traceback
                 traceback.print_exc()
@@ -128,11 +128,11 @@ class VisioDocumentManager:
                     self.documents.append(doc_info)
                     
                     if self.debug:
-                        print(f"[DEBUG] VBA gefunden in: {doc_info.name} ({doc_info.get_type_name()})")
+                        print(f"[DEBUG] VBA found in: {doc_info.name} ({doc_info.get_type_name()})")
         
         except Exception as e:
             if self.debug:
-                print(f"[DEBUG] Fehler bei Document Discovery: {e}")
+                print(f"[DEBUG] Error during document discovery: {e}")
     
     def get_main_document(self):
         """Get main document info"""
@@ -156,18 +156,18 @@ class VisioDocumentManager:
     def print_summary(self):
         """Print summary of discovered documents"""
         if not self.documents:
-            print("⚠️  Keine Dokumente mit VBA-Code gefunden")
+            print("⚠️  No documents with VBA code found")
             return
         
-        print(f"\n📚 Gefundene Dokumente mit VBA: {len(self.documents)}")
+        print(f"\n📚 Documents with VBA found: {len(self.documents)}")
         
         main_doc_info = self.get_main_document()
         if main_doc_info:
-            print(f"   📄 Hauptdokument: {main_doc_info.name} ({main_doc_info.get_type_name()})")
+            print(f"   📄 Main document: {main_doc_info.name} ({main_doc_info.get_type_name()})")
         
         stencils = self.get_stencils()
         if stencils:
-            print(f"   📋 Schablonen: {len(stencils)}")
+            print(f"   📋 Stencils: {len(stencils)}")
             for stencil in stencils:
                 print(f"      - {stencil.name}")
         
