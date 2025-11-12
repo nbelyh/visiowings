@@ -1,4 +1,4 @@
-"""Command Line Interface for visiowings - Document module force option"""
+"""Command Line Interface for visiowings with bidirectional sync support"""
 import argparse
 from pathlib import Path
 from .vba_export import VisioVBAExporter
@@ -26,7 +26,7 @@ def cmd_edit(args):
     importer = VisioVBAImporter(str(visio_file), force_document=args.force)
     if not importer.connect_to_visio():
         return
-    watcher = VBAWatcher(output_dir, importer)
+    watcher = VBAWatcher(output_dir, importer, exporter=exporter, bidirectional=getattr(args,'bidirectional',False))
     watcher.start()
 
 def cmd_export(args):
@@ -48,13 +48,14 @@ def cmd_import(args):
 def main():
     parser = argparse.ArgumentParser(
         description='visiowings - VBA Editor für Visio',
-        epilog='Beispiel: visiowings edit --file dokument.vsdm [--force]'
+        epilog='Beispiel: visiowings edit --file dokument.vsdm [--force] [--bidirectional]'
     )
     subparsers = parser.add_subparsers(dest='command', help='Verfügbare Befehle')
     edit_parser = subparsers.add_parser('edit', help='VBA-Module bearbeiten mit Live-Sync')
     edit_parser.add_argument('--file', '-f', required=True, help='Visio-Datei (.vsdm)')
     edit_parser.add_argument('--output', '-o', help='Export-Verzeichnis')
     edit_parser.add_argument('--force', action='store_true', help='Force overwrite Document module code')
+    edit_parser.add_argument('--bidirectional', action='store_true', help='Bidirektionaler Sync: Änderungen in Visio automatisch nach VSCode exportieren')
     export_parser = subparsers.add_parser('export', help='VBA-Module exportieren')
     export_parser.add_argument('--file', '-f', required=True, help='Visio-Datei')
     export_parser.add_argument('--output', '-o', help='Export-Verzeichnis')
