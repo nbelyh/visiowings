@@ -9,9 +9,12 @@
 - ✅ **Line numbers** (which the VBA editor doesn't have!)
 - 🌙 **Dark mode** for easier reading
 - 🔄 **Live sync** - changes in VS Code automatically update Visio
+- 🔄 **Bidirectional sync** - changes in Visio automatically update VS Code (optional)
 - 👁️ **Git version control** while editing (not after!)
+- ⏱️ **Smart change detection** - only syncs when content actually changed
 - ⌨️ **Modern editor features**: multi-cursor, auto-complete, search & replace
 - 🚀 All your favorite keyboard shortcuts (Ctrl+/, Shift+Alt+Arrow, etc.)
+- 🐛 **Debug mode** for troubleshooting
 
 ## Why visiowings?
 
@@ -88,7 +91,22 @@ Now edit your `.bas`, `.cls`, or `.frm` files. Every time you save (Ctrl+S), the
 ### Edit Mode (with live sync)
 
 ```bash
+# Basic mode (VS Code → Visio only)
 visiowings edit --file document.vsdm
+
+# With bidirectional sync (VS Code ↔ Visio)
+visiowings edit --file document.vsdm --bidirectional
+
+# Force overwrite Document modules (ThisDocument.cls)
+visiowings edit --file document.vsdm --force
+
+# Debug mode for troubleshooting
+visiowings edit --file document.vsdm --debug
+
+# All options combined
+visiowings edit --file document.vsdm --force --bidirectional --debug
+
+# Custom output directory
 visiowings edit --file document.vsdm --output ./vba_modules
 ```
 
@@ -105,8 +123,37 @@ visiowings export --file document.vsdm --output ./vba_modules
 Import VBA modules from files back into Visio:
 
 ```bash
-visiowings import --file document.vsdm --input ./vba_modules
+visiowings import --file document.vsdm --input ./vba_modules --force
 ```
+
+## Command Line Options
+
+### `edit` command
+
+| Option | Description |
+|--------|-------------|
+| `--file`, `-f` | Visio file path (`.vsdm`) - **required** |
+| `--output`, `-o` | Export directory (default: current directory) |
+| `--force` | Force overwrite Document modules (ThisDocument.cls) |
+| `--bidirectional` | Enable bidirectional sync (Visio → VS Code) |
+| `--debug` | Enable verbose debug logging |
+
+### `export` command
+
+| Option | Description |
+|--------|-------------|
+| `--file`, `-f` | Visio file path (`.vsdm`) - **required** |
+| `--output`, `-o` | Export directory (default: current directory) |
+| `--debug` | Enable verbose debug logging |
+
+### `import` command
+
+| Option | Description |
+|--------|-------------|
+| `--file`, `-f` | Visio file path (`.vsdm`) - **required** |
+| `--input`, `-i` | Import directory (default: current directory) |
+| `--force` | Force overwrite Document modules (ThisDocument.cls) |
+| `--debug` | Enable verbose debug logging |
 
 ## Example Workflow
 
@@ -115,22 +162,24 @@ visiowings import --file document.vsdm --input ./vba_modules
 # 2. Navigate to your project folder
 cd C:/Projects/MyVisioProject
 
-# 3. Start visiowings
-visiowings edit --file "MyDiagram.vsdm"
+# 3. Start visiowings with bidirectional sync
+visiowings edit --file "MyDiagram.vsdm" --force --bidirectional
 
 # Output:
 # 📂 Visio-Datei: C:\Projects\MyVisioProject\MyDiagram.vsdm
 # 📁 Export-Verzeichnis: C:\Projects\MyVisioProject
 #
 # === Exportiere VBA-Module ===
+# ✓ Exportiert: ThisDocument.cls
 # ✓ Exportiert: Module1.bas
 # ✓ Exportiert: ClassModule1.cls
 #
-# ✓ 2 Module exportiert
+# ✓ 3 Module exportiert
 #
 # === Starte Live-Synchronisation ===
 # 👁️  Überwache Verzeichnis: C:\Projects\MyVisioProject
 # 💾 Speichere Dateien in VS Code (Ctrl+S) um sie nach Visio zu synchronisieren
+# 🔄 Bidirektionaler Sync: Änderungen in Visio werden automatisch nach VSCode exportiert.
 # ⏸️  Drücke Ctrl+C zum Beenden...
 
 # 4. Edit Module1.bas in VS Code and save (Ctrl+S)
@@ -138,7 +187,39 @@ visiowings edit --file "MyDiagram.vsdm"
 # 📝 Änderung erkannt: Module1.bas
 # ✓ Importiert: Module1.bas
 
-# 5. Check Visio - your changes are already there!
+# 5. Edit VBA code in Visio (Alt+F11)
+# Output (after ~4 seconds):
+# 🔄 Visio-Dokument wurde synchronisiert → VSCode.
+
+# 6. Check VS Code - your changes from Visio are already there!
+```
+
+## Bidirectional Sync
+
+With the `--bidirectional` flag, visiowings enables two-way synchronization:
+
+- **VS Code → Visio**: Changes saved in VS Code (Ctrl+S) are immediately imported to Visio
+- **Visio → VS Code**: Changes in Visio VBA Editor are automatically exported to VS Code every 4 seconds
+
+### Smart Change Detection
+
+visiowings uses MD5 hash-based change detection to prevent unnecessary exports:
+
+- Only exports when VBA code actually changes
+- Prevents endless loops
+- Pauses file watcher during export operations
+- Efficient polling without constant file writes
+
+```bash
+# With debug mode, you can see the hash comparison:
+visiowings edit --file document.vsdm --bidirectional --debug
+
+# Output:
+# [DEBUG] Hash berechnet: 882c423e... (3 Module)
+# [DEBUG] Last hash: 882c423e...
+# [DEBUG] Current hash: 882c423e...
+# [DEBUG] Hashes identisch - kein Export
+# [DEBUG] Keine Änderungen in Visio erkannt, kein Export.
 ```
 
 ## Git Integration
@@ -191,7 +272,7 @@ For the best experience, install these VS Code extensions:
 ## Supported File Types
 
 - `.bas` - Standard VBA modules
-- `.cls` - Class modules
+- `.cls` - Class modules (including Document modules like ThisDocument)
 - `.frm` - User forms
 
 ## Troubleshooting
@@ -219,16 +300,45 @@ Make sure:
 - The file watcher is running (you should see the 👁️ message)
 - You're saving the file (Ctrl+S)
 - The file extension is `.bas`, `.cls`, or `.frm`
+- The document is still open in Visio
+
+### Endless Loop / Constant Exports
+
+This should not happen with the latest version, but if it does:
+
+1. Use `--debug` flag to see what's triggering exports:
+   ```bash
+   visiowings edit --file document.vsdm --bidirectional --debug
+   ```
+
+2. Check the hash values in debug output:
+   - If hashes are identical but export still happens, please report an issue
+   - If hashes change unexpectedly, check if something else is modifying VBA
+
+3. The file watcher is paused during exports to prevent triggering itself
+
+### Document Module (ThisDocument.cls) not updating
+
+Document modules require the `--force` flag:
+
+```bash
+visiowings edit --file document.vsdm --force
+```
+
+Without `--force`, Document modules are skipped with a warning.
 
 ## Comparison with xlwings
 
 **visiowings** is heavily inspired by [xlwings](https://www.xlwings.org/)'s VBA editing feature:
 
 | Feature | xlwings (Excel) | visiowings (Visio) |
-|---------|----------------|--------------------|
+|---------|----------------|--------------------||
 | Edit VBA in VS Code | ✅ | ✅ |
 | Live sync | ✅ | ✅ |
+| Bidirectional sync | ✅ | ✅ |
 | Export/Import | ✅ | ✅ |
+| Hash-based change detection | ✅ | ✅ |
+| Debug mode | ✅ | ✅ |
 | Python ↔ VBA calls | ✅ | ❌ (not yet) |
 | UDFs | ✅ | N/A |
 
@@ -236,10 +346,12 @@ Make sure:
 
 - [ ] Add Python ↔ Visio integration (like xlwings `RunPython`)
 - [ ] Support for Visio templates (`.vstm`)
+- [ ] Configurable polling interval
 - [ ] Standalone executable (no Python required)
 - [ ] GUI version
 - [ ] Auto-backup before import
 - [ ] Diff viewer for changes
+- [ ] `.visiowingsignore` file support
 
 ## Contributing
 
