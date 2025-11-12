@@ -1,10 +1,12 @@
 """VBA Module Import functionality
 Document module overwrite logic (force option)
 Removes VBA header when importing via force
+Supports multiple documents (drawings + stencils)
 """
 import win32com.client
 from pathlib import Path
 import re
+from .document_manager import VisioDocumentManager
 
 class VisioVBAImporter:
     """Importiert VBA-Module in Visio-Dokumente, optional mit force für Document-Module"""
@@ -15,24 +17,29 @@ class VisioVBAImporter:
         self.doc = None
         self.force_document = force_document
         self.debug = debug
+        self.doc_manager = None
+        self.document_map = {}  # Maps folder_name -> VisioDocumentInfo
 
     def connect_to_visio(self):
-        """Verbindet sich mit bereits geöffnetem Dokument"""
+        """Verbindet sich mit bereits geöffnetem Dokument und entdeckt alle Dokumente"""
         try:
-            self.visio_app = win32com.client.Dispatch("Visio.Application")
+            # Use DocumentManager for multi-document support
+            self.doc_manager = VisioDocumentManager(self.visio_file_path, debug=self.debug)
             
-            # Find already opened document
-            for doc in self.visio_app.Documents:
-                if doc.FullName.lower() == str(self.visio_file_path).lower():
-                    self.doc = doc
-                    if self.debug:
-                        print(f"[DEBUG] Verbunden mit Dokument: {doc.Name}")
-                    return True
+            if not self.doc_manager.connect_to_visio():
+                return False
             
-            print(f"⚠️  Dokument nicht geöffnet: {self.visio_file_path}")
-            print("   Bitte öffne das Dokument in Visio.")
-            self.doc = None
-            return False
+            self.visio_app = self.doc_manager.visio_app
+            self.doc = self.doc_manager.main_doc
+            
+            # Build document map (folder_name -> document)
+            for doc_info in self.doc_manager.get_all_documents_with_vba():
+                self.document_map[doc_info.folder_name] = doc_info
+            
+            if self.debug:
+                print(f"[DEBUG] Dokument-Map erstellt: {list(self.document_map.keys())}")
+            
+            return True
         
         except Exception as e:
             print(f"❌ Fehler beim Verbinden: {e}")
@@ -87,6 +94,30 @@ class VisioVBAImporter:
             print(f"[DEBUG] {code_start} Header-Zeilen beim Import entfernt")
         
         return result
+    
+    def _find_document_for_file(self, file_path):
+        """Find which document owns this file based on directory structure
+        
+        Args:
+            file_path: Path object to the VBA file
+        
+        Returns:
+            VisioDocumentInfo or None if not found
+        """
+        # Check if file is in a subdirectory
+        parent_dir = file_path.parent.name
+        
+        # If parent directory matches a document folder name, use that document
+        if parent_dir in self.document_map:
+            if self.debug:
+                print(f"[DEBUG] Datei {file_path.name} gehört zu Dokument: {parent_dir}")
+            return self.document_map[parent_dir]
+        
+        # Otherwise, use main document (backward compatibility)
+        main_doc_info = self.doc_manager.get_main_document()
+        if self.debug:
+            print(f"[DEBUG] Datei {file_path.name} wird Hauptdokument zugeordnet")
+        return main_doc_info
 
     def import_module(self, file_path):
         """Importiert ein einzelnes VBA-Modul, überschreibt Document-Module falls 'force'"""
@@ -97,12 +128,19 @@ class VisioVBAImporter:
             return False
         
         try:
-            vb_project = self.doc.VBProject
             file_path = Path(file_path)
+            
+            # Find target document for this file
+            target_doc_info = self._find_document_for_file(file_path)
+            if not target_doc_info:
+                print(f"⚠️  Kein passendes Dokument für {file_path.name} gefunden")
+                return False
+            
+            vb_project = target_doc_info.doc.VBProject
             module_name = file_path.stem
             
             if self.debug:
-                print(f"[DEBUG] Importiere: {file_path.name}")
+                print(f"[DEBUG] Importiere {file_path.name} in {target_doc_info.name}")
             
             # Find existing component with same name
             component = None
@@ -127,7 +165,7 @@ class VisioVBAImporter:
                     if code.strip():  # Only add if there's actual code
                         cm.AddFromString(code)
                     
-                    print(f"✓ Code von {file_path.name} (ohne Header) überschrieben (force)")
+                    print(f"✓ Importiert: {target_doc_info.folder_name}/{file_path.name} (force)")
                     return True
                 else:
                     print(f"⚠️  Document-Module '{module_name}' ohne --force übersprungen.")
@@ -143,7 +181,7 @@ class VisioVBAImporter:
             
             # Import the module
             vb_project.VBComponents.Import(str(file_path))
-            print(f"✓ Importiert: {file_path.name}")
+            print(f"✓ Importiert: {target_doc_info.folder_name}/{file_path.name}")
             return True
         
         except Exception as e:
@@ -152,3 +190,7 @@ class VisioVBAImporter:
                 import traceback
                 traceback.print_exc()
             return False
+    
+    def get_document_folders(self):
+        """Get list of document folder names for file watching"""
+        return list(self.document_map.keys())
