@@ -1,0 +1,2 @@
+pywin32>=305
+watchdog>=3.0.0
