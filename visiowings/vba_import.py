@@ -54,8 +54,7 @@ class VisioVBAImporter:
         try:
             # Test if document is still accessible
             _ = self.doc.Name
-            if self.debug:
-                print("[DEBUG] Verbindung OK")
+            # Connection is OK - no output needed to avoid spam
             return True
         except Exception:
             if self.debug:
