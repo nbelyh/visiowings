@@ -112,7 +112,6 @@ pip install -e .
 4. **Start syncing**:
    ```bash
    visiowings edit --file "document.vsdm" --bidirectional
-   code .
    ```
 
 Done! Edit in VS Code, save with Ctrl+S, and changes sync instantly to Visio.
