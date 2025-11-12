@@ -2,6 +2,7 @@
 Document module overwrite logic (force option)
 Removes VBA header when importing via force
 Supports multiple documents (drawings + stencils)
+Automatically repairs missing VBA headers for new .bas files (VS Code workflow)
 """
 import win32com.client
 from pathlib import Path
@@ -49,7 +50,6 @@ class VisioVBAImporter:
             _ = self.doc.Name
             return True
         except Exception:
-            # Only message if NOT silent_reconnect
             if self.debug and not self.silent_reconnect:
                 print("[DEBUG] Connection lost, attempting to reconnect...")
             elif not self.debug and not self.silent_reconnect:
@@ -84,6 +84,38 @@ class VisioVBAImporter:
             print(f"[DEBUG] File {file_path.name} assigned to main document")
         return main_doc_info
 
+    def _repair_vba_module_file(self, file_path):
+        """
+        Ensures the file has a correct VBA header and minimal code so that import does not fail.
+        If the file is empty, adds a valid header and a dummy Sub.
+        If the header is missing, adds it derived from filename.
+        """
+        try:
+            text = file_path.read_text(encoding="utf-8")
+        except Exception:
+            text = ""
+        module_name = file_path.stem
+        header = f'Attribute VB_Name = "{module_name}"\nOption Explicit\n'
+        dummy_sub = f'Sub Dummy()\nEnd Sub\n'
+        needs_write = False
+
+        # If empty file, insert header + dummy sub
+        if not text.strip():
+            text = header + '\n' + dummy_sub
+            needs_write = True
+        elif 'Attribute VB_Name' not in text:
+            # Prepend header if not present
+            text = header + text
+            needs_write = True
+        # Always ensure trailing newline
+        if not text.endswith("\n"):
+            text += "\n"
+            needs_write = True
+        if needs_write:
+            if self.debug:
+                print(f"[DEBUG] Auto-repaired/module-header for {file_path.name}")
+            file_path.write_text(text, encoding="utf-8")
+
     def import_module(self, file_path):
         # Check connection before each import
         if not self._ensure_connection():
@@ -91,6 +123,7 @@ class VisioVBAImporter:
             return False
         try:
             file_path = Path(file_path)
+            self._repair_vba_module_file(file_path)
             target_doc_info = self._find_document_for_file(file_path)
             if not target_doc_info:
                 print(f"⚠️  No matching document found for {file_path.name}")
