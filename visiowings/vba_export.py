@@ -38,7 +38,7 @@ class VisioVBAExporter:
             return True
         except Exception as e:
             if not silent:
-                print(f"❌ Fehler beim Verbinden mit Visio: {e}")
+                print(f"❌ Error connecting to Visio: {e}")
             return False
     
     def _strip_vba_header_file(self, file_path):
@@ -79,11 +79,11 @@ class VisioVBAExporter:
             if self.debug:
                 removed_lines = code_start
                 if removed_lines > 0:
-                    print(f"[DEBUG] {removed_lines} Header-Zeilen entfernt aus {file_path.name}")
+                    print(f"[DEBUG] {removed_lines} header lines removed from {file_path.name}")
         
         except Exception as e:
             if self.debug:
-                print(f"[DEBUG] Fehler beim Header-Stripping: {e}")
+                print(f"[DEBUG] Error during header stripping: {e}")
             pass
     
     def _module_content_hash(self, vb_project):
@@ -101,12 +101,12 @@ class VisioVBAExporter:
             content_hash = hashlib.md5(hash_input.encode()).hexdigest()
             
             if self.debug:
-                print(f"[DEBUG] Hash berechnet: {content_hash[:8]}... ({len(code_parts)} Module)")
+                print(f"[DEBUG] Hash calculated: {content_hash[:8]}... ({len(code_parts)} modules)")
             
             return content_hash
         except Exception as e:
             if self.debug:
-                print(f"[DEBUG] Fehler bei Hash-Berechnung: {e}")
+                print(f"[DEBUG] Error during hash calculation: {e}")
             return None
     
     def _export_document_modules(self, doc_info, output_dir, last_hash=None):
@@ -129,7 +129,7 @@ class VisioVBAExporter:
             # Check if content actually changed
             if last_hash and last_hash == current_hash:
                 if self.debug:
-                    print(f"[DEBUG] {doc_info.name}: Hashes identisch - kein Export")
+                    print(f"[DEBUG] {doc_info.name}: Hashes identical - no export")
                 return [], current_hash
             
             # Create subdirectory for this document
@@ -159,12 +159,12 @@ class VisioVBAExporter:
                     self._strip_vba_header_file(file_path)
                 
                 exported_files.append(file_path)
-                print(f"✓ Exportiert: {doc_info.folder_name}/{file_name}")
+                print(f"✓ Exported: {doc_info.folder_name}/{file_name}")
             
             return exported_files, current_hash
         
         except Exception as e:
-            print(f"❌ Fehler beim Exportieren von {doc_info.name}: {e}")
+            print(f"❌ Error exporting {doc_info.name}: {e}")
             if self.debug:
                 import traceback
                 traceback.print_exc()
@@ -181,7 +181,7 @@ class VisioVBAExporter:
             tuple: (dict of {doc_folder: exported_files}, dict of {doc_folder: hash})
         """
         if not self.doc_manager:
-            print("❌ Kein Dokument-Manager initialisiert")
+            print("❌ No document manager initialized")
             return {}, {}
         
         if last_hashes is None:
@@ -193,7 +193,7 @@ class VisioVBAExporter:
         documents = self.doc_manager.get_all_documents_with_vba()
         
         if not documents:
-            print("⚠️  Keine Dokumente mit VBA-Code gefunden")
+            print("⚠️  No documents with VBA code found")
             return {}, {}
         
         try:
@@ -202,7 +202,7 @@ class VisioVBAExporter:
             
             for doc_info in documents:
                 if self.debug:
-                    print(f"[DEBUG] Exportiere {doc_info.name}...")
+                    print(f"[DEBUG] Exporting {doc_info.name}...")
                 
                 last_hash = last_hashes.get(doc_info.folder_name)
                 exported_files, current_hash = self._export_document_modules(
@@ -218,14 +218,14 @@ class VisioVBAExporter:
             return all_exported, all_hashes
         
         except Exception as e:
-            print(f"❌ Fehler beim Exportieren: {e}")
+            print(f"❌ Error during export: {e}")
             if self.debug:
                 import traceback
                 traceback.print_exc()
             else:
                 print("")
-                print("⚠️  Stelle sicher, dass in Visio folgende Einstellung aktiviert ist:")
-                print("   Datei → Optionen → Trust Center → Trust Center-Einstellungen")
-                print("   → Makroeinstellungen → 'Zugriff auf VBA-Projektobjektmodell vertrauen'")
+                print("⚠️  Make sure the following setting is enabled in Visio:")
+                print("   File → Options → Trust Center → Trust Center Settings")
+                print("   → Macro Settings → 'Trust access to the VBA project object model'")
             
             return {}, {}
