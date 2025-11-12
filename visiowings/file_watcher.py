@@ -128,8 +128,8 @@ class VBAWatcher:
                         debug=self.debug
                     )
                     
-                    # Connect silently (document is already open)
-                    if thread_exporter.connect_to_visio():
+                    # Connect silently (document is already open, no need for verbose messages)
+                    if thread_exporter.connect_to_visio(silent=True):
                         # Export with hash comparison
                         result = thread_exporter.export_modules(
                             self.watch_directory, 
