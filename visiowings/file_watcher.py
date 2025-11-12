@@ -1,5 +1,6 @@
 """File system watcher for VBA modules
-Adds smart polling for VSCode ← Visio sync (detects document changes)
+Adds smart polling for VSCode ← Visio sync (detects document changes).
+Fix: COM threading (CoInitialize) in poll thread.
 """
 import time
 import threading
@@ -37,24 +38,31 @@ class VBAWatcher:
         self.last_vba_sync_time = 0
         self.doc = importer.doc
     def _start_polling(self, poll_interval=4):
-        """Check periodically for changes in Visio (sync → VSCode)"""
         self.smart_poll_timer = threading.Timer(poll_interval, self._poll_vba_changes)
         self.smart_poll_timer.daemon = True
         self.smart_poll_timer.start()
     def _poll_vba_changes(self):
         try:
+            import pythoncom
+            pythoncom.CoInitialize()
             # Reconnect in case document has been lost
             if not self.importer._ensure_connection():
                 return
-            # Simple sync: always export - could be optimized with last doc hash
             if self.exporter:
-                self.exporter.export_modules(self.watch_directory)
-                print("🔄 Visio-Dokument wurde synchronisiert → VSCode.")
+                # Erstelle neuen Exporter für den Thread
+                from .vba_export import VisioVBAExporter
+                thread_exporter = VisioVBAExporter(str(self.importer.visio_file_path))
+                if thread_exporter.connect_to_visio():
+                    thread_exporter.export_modules(self.watch_directory)
+                    print("🔄 Visio-Dokument wurde synchronisiert → VSCode.")
             self.last_vba_sync_time = time.time()
         except Exception as e:
             print(f"⚠️  Fehler beim Polling-Export: {e}")
         finally:
-            # Continue polling if enabled
+            try:
+                import pythoncom
+                pythoncom.CoUninitialize()
+            except: pass
             if self.bidirectional:
                 self._start_polling()
     def start(self):
@@ -82,7 +90,6 @@ class VBAWatcher:
             self.observer.stop()
             self.observer.join()
             print("\n✓ Überwachung beendet")
-        # Polling stoppen
         if self.smart_poll_timer:
             self.smart_poll_timer.cancel()
             print("✓ Polling gestoppt")
