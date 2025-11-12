@@ -12,25 +12,30 @@ class VisioVBAExporter:
         self.doc = None
         self.debug = debug
     
-    def connect_to_visio(self):
-        """Connect to Visio application and open document"""
+    def connect_to_visio(self, silent=False):
+        """Connect to Visio application and open document
+        
+        Args:
+            silent: If True, suppress connection success messages (used in polling)
+        """
         try:
             self.visio_app = win32com.client.Dispatch("Visio.Application")
             # Try to find already open document first
             for doc in self.visio_app.Documents:
                 if doc.FullName.lower() == str(self.visio_file_path).lower():
                     self.doc = doc
-                    if self.debug:
+                    if self.debug and not silent:
                         print(f"[DEBUG] Verbunden mit geöffnetem Dokument: {doc.Name}")
                     return True
             
             # If not open, open it
             self.doc = self.visio_app.Documents.Open(self.visio_file_path)
-            if self.debug:
+            if self.debug and not silent:
                 print(f"[DEBUG] Dokument geöffnet: {self.doc.Name}")
             return True
         except Exception as e:
-            print(f"❌ Fehler beim Verbinden mit Visio: {e}")
+            if not silent:
+                print(f"❌ Fehler beim Verbinden mit Visio: {e}")
             return False
     
     def _strip_vba_header_file(self, file_path):
