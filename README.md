@@ -205,32 +205,33 @@ cd C:/Projects/MyVisioProject
 visiowings edit --file "MyDiagram.vsdm" --force --bidirectional
 
 # Output:
-# 📂 Visio-Datei: C:\Projects\MyVisioProject\MyDiagram.vsdm
-# 📁 Export-Verzeichnis: C:\Projects\MyVisioProject
+# 📂 Visio file: C:\Projects\MyVisioProject\MyDiagram.vsdm
+# 📁 Export directory: C:\Projects\MyVisioProject
 #
-# === Exportiere VBA-Module ===
-# ✓ Exportiert: ThisDocument.cls
-# ✓ Exportiert: Module1.bas
-# ✓ Exportiert: ClassModule1.cls
+# === Exporting VBA Modules ===
+# ✓ Exported: ThisDocument.cls
+# ✓ Exported: Module1.bas
+# ✓ Exported: ClassModule1.cls
 #
-# ✓ 3 Module exportiert
+# ✓ 3 modules exported
 #
-# === Starte Live-Synchronisation ===
-# 👁️  Überwache Verzeichnis: C:\Projects\MyVisioProject
-# 💾 Speichere Dateien in VS Code (Ctrl+S) um sie nach Visio zu synchronisieren
-# 🔄 Bidirektionaler Sync: Änderungen in Visio werden automatisch nach VSCode exportiert.
-# ⏸️  Drücke Ctrl+C zum Beenden...
+# === Starting Live Synchronization ===
+# 👁️  Watching directory: C:\Projects\MyVisioProject
+# 💾 Save files in VS Code (Ctrl+S) to synchronize them to Visio
+# 🔄 Bidirectional sync: Changes in Visio are automatically exported to VS Code.
+# ⏸️  Press Ctrl+C to stop...
 
 # 4. Edit Module1.bas in VS Code and save (Ctrl+S)
 # Output:
-# 📝 Änderung erkannt: Module1.bas
-# ✓ Importiert: Module1.bas
+# 📝 Change detected: Module1.bas
+# ✓ Imported: Module1.bas
 
 # 5. Edit VBA code in Visio (Alt+F11)
 # Output (after ~4 seconds):
-# 🔄 Visio-Dokument wurde synchronisiert → VSCode.
+# 🔄 Visio document synchronized → VS Code.
 
 # 6. Check VS Code - your changes from Visio are already there!
+
 ```
 
 ## Bidirectional Sync
