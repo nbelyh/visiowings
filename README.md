@@ -61,10 +61,10 @@ The Visio VBA editor lacks modern features that developers expect. **visiowings*
 
 ```bash
 # Instead of this painful workflow:
-Visio VBA Editor → No line numbers → Limited editing → Manual version control
+Visio VBA Editor -> No line numbers -> Limited editing -> Manual version control
 
 # You get this:
-VS Code → Full editor features → Live sync to Visio → Automatic Git tracking
+VS Code -> Full editor features -> Live sync to Visio -> Automatic Git tracking
 ```
 
 ## Installation
@@ -96,8 +96,8 @@ pip install -e .
 ⚠️ **Important**: Before using visiowings, you must enable VBA project access:
 
 1. Open Visio
-2. **File** → **Options** → **Trust Center** → **Trust Center Settings**
-3. **Macro Settings** → ☑ "Trust access to the VBA project object model"
+2. **File** -> **Options** -> **Trust Center** -> **Trust Center Settings**
+3. **Macro Settings** -> ☑ "Trust access to the VBA project object model"
 
 ### 2. Open your Visio file
 
@@ -130,10 +130,10 @@ Now edit your `.bas`, `.cls`, or `.frm` files. Every time you save (Ctrl+S), the
 ### Edit Mode (with live sync)
 
 ```bash
-# Basic mode (VS Code → Visio only)
+# Basic mode (VS Code -> Visio only)
 visiowings edit --file document.vsdm
 
-# With bidirectional sync (VS Code ↔ Visio)
+# With bidirectional sync (VS Code <-> Visio)
 visiowings edit --file document.vsdm --bidirectional
 
 # Force overwrite Document modules (ThisDocument.cls)
@@ -174,7 +174,7 @@ visiowings import --file document.vsdm --input ./vba_modules --force
 | `--file`, `-f` | Visio file path (`.vsdm`) - **required** |
 | `--output`, `-o` | Export directory (default: current directory) |
 | `--force` | Force overwrite Document modules (ThisDocument.cls) |
-| `--bidirectional` | Enable bidirectional sync (Visio → VS Code) |
+| `--bidirectional` | Enable bidirectional sync (Visio <-> VS Code) |
 | `--debug` | Enable verbose debug logging |
 
 ### `export` command
@@ -228,7 +228,7 @@ visiowings edit --file "MyDiagram.vsdm" --force --bidirectional
 
 # 5. Edit VBA code in Visio (Alt+F11)
 # Output (after ~4 seconds):
-# 🔄 Visio document synchronized → VS Code.
+# 🔄 Visio document synchronized -> VS Code.
 
 # 6. Check VS Code - your changes from Visio are already there!
 
@@ -238,8 +238,8 @@ visiowings edit --file "MyDiagram.vsdm" --force --bidirectional
 
 With the `--bidirectional` flag, visiowings enables two-way synchronization:
 
-- **VS Code → Visio**: Changes saved in VS Code (Ctrl+S) are immediately imported to Visio
-- **Visio → VS Code**: Changes in Visio VBA Editor are automatically exported to VS Code every 4 seconds
+- **VS Code -> Visio**: Changes saved in VS Code (Ctrl+S) are immediately imported to Visio
+- **Visio -> VS Code**: Changes in Visio VBA Editor are automatically exported to VS Code every 4 seconds
 
 ### Smart Change Detection
 
@@ -322,8 +322,8 @@ For the best experience, install these VS Code extensions:
 If you get an error about VBA project access:
 
 1. Open Visio
-2. **File** → **Options** → **Trust Center** → **Trust Center Settings**
-3. **Macro Settings** → ☑ "Trust access to the VBA project object model"
+2. **File** -> **Options** -> **Trust Center** -> **Trust Center Settings**
+3. **Macro Settings** -> ☑ "Trust access to the VBA project object model"
 4. Restart visiowings
 
 ### "Document not open"
@@ -370,7 +370,7 @@ Without `--force`, Document modules are skipped with a warning.
 
 ## Roadmap
 
-- [ ] Add Python ↔ Visio integration (like xlwings `RunPython`)
+- [ ] Add Python <-> Visio integration (like xlwings `RunPython`)
 - [ ] Support for Visio templates (`.vstm`)
 - [ ] Configurable polling interval
 - [ ] Standalone executable (no Python required)
