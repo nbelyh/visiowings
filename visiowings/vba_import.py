@@ -1,5 +1,6 @@
 """VBA Module Import functionality
-Document module overwrite logic (force option)"""
+Document module overwrite logic (force option)
+Reconnect fix for lost Visio document reference"""
 import win32com.client
 from pathlib import Path
 
@@ -21,20 +22,33 @@ class VisioVBAImporter:
                     return True
             print(f"⚠️  Dokument nicht geöffnet: {self.visio_file_path}")
             print("   Bitte öffne das Dokument in Visio.")
+            self.doc = None
             return False
         except Exception as e:
             print(f"❌ Fehler beim Verbinden: {e}")
+            self.doc = None
             return False
+
+    def _ensure_connection(self):
+        """Stellt sicher, dass die Verbindung zum Dokument noch aktiv ist"""
+        try:
+            # Teste ob das Dokument noch zugänglich ist
+            _ = self.doc.Name
+            return True
+        except Exception:
+            print("🔄 Verbindung verloren, versuche neu zu verbinden...")
+            return self.connect_to_visio()
 
     def import_module(self, file_path):
         """Importiert ein einzelnes VBA-Modul, überschreibt Document-Module falls 'force'"""
-        if not self.doc:
+        # Verbindung vor jedem Import prüfen
+        if not self._ensure_connection():
+            print("⚠️  Keine Verbindung zu Visio - stelle sicher, dass das Dokument geöffnet ist")
             return False
         try:
             vb_project = self.doc.VBProject
             file_path = Path(file_path)
             module_name = file_path.stem
-            # Suche Component
             component = None
             for comp in vb_project.VBComponents:
                 if comp.Name == module_name:
