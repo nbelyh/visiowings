@@ -5,6 +5,7 @@ Fix: Hash-based change detection to prevent endless loops.
 Fix: Pause observer during export to prevent file watcher triggers.
 Supports multiple documents (drawings + stencils).
 Extended: Optional sync-delete of Visio modules when .bas/.cls/.frm files are deleted (see CLI flag)
+Thread-safe: Deletes use thread-local COM connection!
 """
 import time
 import threading
@@ -48,24 +49,32 @@ class VBAFileHandler(FileSystemEventHandler):
     def on_deleted(self, event):
         if not self.sync_delete_modules or event.is_directory:
             return
-        file_path = Path(event.src_path)
-        if file_path.suffix.lower() not in self.extensions:
-            return
-        module_name = file_path.stem
-        if self.debug:
-            print(f"[DEBUG] Local file deleted: {module_name}{file_path.suffix}")
-        # Remove corresponding module from Visio
-        for doc_info in self.importer.doc_manager.get_all_documents_with_vba():
-            vb_project = doc_info.doc.VBProject
-            for comp in vb_project.VBComponents:
-                if comp.Name == module_name:
-                    try:
-                        vb_project.VBComponents.Remove(comp)
-                        print(f"✓ Removed Visio module: {module_name} ({doc_info.name})")
-                        if self.debug:
-                            print(f"[DEBUG] Module '{module_name}' removed from '{doc_info.name}' due to local delete")
-                    except Exception as e:
-                        print(f"⚠️  Error removing module '{module_name}' from '{doc_info.name}': {e}")
+        from .vba_import import VisioVBAImporter
+        import pythoncom
+        pythoncom.CoInitialize()
+        try:
+            file_path = Path(event.src_path)
+            if file_path.suffix.lower() not in self.extensions:
+                return
+            module_name = file_path.stem
+            # Thread-local COM connection & importer
+            importer_threadlocal = VisioVBAImporter(self.importer.visio_file_path, debug=self.debug)
+            if not importer_threadlocal.connect_to_visio():
+                print("⚠️  Could not connect to Visio for module removal.")
+                return
+            for doc_info in importer_threadlocal.doc_manager.get_all_documents_with_vba():
+                vb_project = doc_info.doc.VBProject
+                for comp in vb_project.VBComponents:
+                    if comp.Name == module_name:
+                        try:
+                            vb_project.VBComponents.Remove(comp)
+                            print(f"✓ Removed Visio module: {module_name} ({doc_info.name})")
+                            if self.debug:
+                                print(f"[DEBUG] Module '{module_name}' removed from '{doc_info.name}' due to local delete")
+                        except Exception as e:
+                            print(f"⚠️  Error removing module '{module_name}' from '{doc_info.name}': {e}")
+        finally:
+            pythoncom.CoUninitialize()
 
 class VBAWatcher:
     def __init__(self, watch_directory, importer, exporter=None, bidirectional=False, debug=False, sync_delete_modules=False):
