@@ -8,6 +8,7 @@ Supports:
 Auto-detects all open documents and organizes VBA code by document.
 """
 import win32com.client
+import pythoncom
 from pathlib import Path
 import re
 
@@ -83,6 +84,17 @@ class VisioDocumentManager:
     def connect_to_visio(self):
         """Connect to Visio and discover all open documents"""
         try:
+            # Ensure COM is initialized in this thread
+            try:
+                pythoncom.CoInitialize()
+                if self.debug:
+                    print("[DEBUG] COM initialized in document_manager")
+            except:
+                # Already initialized, that's fine
+                if self.debug:
+                    print("[DEBUG] COM already initialized in document_manager")
+                pass
+            
             self.visio_app = win32com.client.Dispatch("Visio.Application")
             
             # Find main document
