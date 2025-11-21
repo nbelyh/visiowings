@@ -19,18 +19,16 @@ class VisioVBAImporter:
         self.doc = None
         self.force_document = force_document
         self.debug = debug
-        self.silent_reconnect = silent_reconnect  # New: suppresses output for expected reconnects
+        self.silent_reconnect = silent_reconnect
         self.doc_manager = None
-        self.document_map = {}  # Maps folder_name -> VisioDocumentInfo
+        self.document_map = {}
 
     def connect_to_visio(self):
         """Connects to already open document and discovers all documents"""
         try:
-            # Ensure COM is initialized in this thread
             try:
                 pythoncom.CoInitialize()
             except:
-                # Already initialized, that's fine
                 pass
             
             self.doc_manager = VisioDocumentManager(self.visio_file_path, debug=self.debug)
@@ -38,7 +36,6 @@ class VisioVBAImporter:
                 return False            
             self.visio_app = self.doc_manager.visio_app
             self.doc = self.doc_manager.main_doc
-            # Build document map (folder_name -> document)
             for doc_info in self.doc_manager.get_all_documents_with_vba():
                 self.document_map[doc_info.folder_name] = doc_info
             if self.debug:
@@ -93,18 +90,12 @@ class VisioVBAImporter:
         return main_doc_info
 
     def _remove_option_explicit_from_body(self, text):
-        """
-        Removes any standalone 'Option Explicit' statements from the text body.
-        This ensures that when we prepend a header with Option Explicit,
-        we don't create duplicates.
-        """
+        """Removes any standalone 'Option Explicit' statements from the text body"""
         lines = text.splitlines(keepends=True)
-        # Pattern to match "Option Explicit" (case insensitive, flexible whitespace)
         option_explicit_pattern = re.compile(r'^\s*Option\s+Explicit\s*$', re.IGNORECASE)
         
         filtered_lines = []
         for line in lines:
-            # Remove the line ending temporarily for pattern matching
             line_content = line.rstrip('\r\n')
             if not option_explicit_pattern.match(line_content):
                 filtered_lines.append(line)
@@ -112,40 +103,33 @@ class VisioVBAImporter:
         return ''.join(filtered_lines)
 
     def _has_actual_code_content(self, text):
-        """
-        Checks if the text contains actual VBA code beyond just headers and Option Explicit.
-        Returns True if there's meaningful code content.
-        """
+        """Checks if the text contains actual VBA code beyond just headers and Option Explicit"""
         lines = text.splitlines()
         vba_header_pattern = re.compile(r'^(VERSION|Begin|End|Attribute |MultiUse)', re.IGNORECASE)
         option_explicit_pattern = re.compile(r'^\s*Option\s+Explicit\s*$', re.IGNORECASE)
         
         for line in lines:
             stripped = line.strip()
-            # Skip empty lines and comments
             if not stripped or stripped.startswith("'"):
                 continue
-            # Skip VBA header lines
             if vba_header_pattern.match(line):
                 continue
-            # Skip Option Explicit
             if option_explicit_pattern.match(line):
                 continue
-            # If we found a non-header, non-comment line, there's actual code
             return True
         
         return False
 
     def _repair_vba_module_file(self, file_path):
-        """
-        Ensures the file has a correct VBA header and minimal code so that import does not fail.
-        If the file is completely empty, adds a valid header and a dummy Sub.
-        If the header is missing but content exists, adds the header.
-        Removes any existing Option Explicit from the body to avoid duplicates.
-        Does NOT add dummy code to files that already have a header with content.
-        """
+        """Ensures the file has a correct VBA header and minimal code so that import does not fail"""
+        text = ""
         try:
             text = file_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            try:
+                text = file_path.read_text(encoding="cp1252")
+            except Exception:
+                text = ""
         except Exception:
             text = ""
         
@@ -155,24 +139,16 @@ class VisioVBAImporter:
         needs_write = False
         has_header = 'Attribute VB_Name' in text
 
-        # Case 1: Completely empty file - add header + dummy sub so import doesn't fail
         if not text.strip():
             text = header + '\n' + dummy_sub
             needs_write = True
-        # Case 2: Has header but no actual code - add dummy sub only if truly empty
-        elif has_header and not self._has_actual_code_content(text):
-            # File has header but no code yet - add dummy sub to prevent import errors
-            text = text.rstrip() + '\n\n' + dummy_sub
+        elif has_header:
             needs_write = True
-        # Case 3: Missing header but has content - prepend header
-        elif not has_header and text.strip():
-            # Remove any existing Option Explicit from body before prepending header
+        elif text.strip():
             text = self._remove_option_explicit_from_body(text)
-            # Prepend header if not present
             text = header + text
             needs_write = True
         
-        # Always ensure trailing newline
         if text and not text.endswith("\n"):
             text += "\n"
             needs_write = True
@@ -180,15 +156,15 @@ class VisioVBAImporter:
         if needs_write:
             if self.debug:
                 print(f"[DEBUG] Auto-repaired module header for {file_path.name}")
-            file_path.write_text(text, encoding="utf-8")
+            try:
+                file_path.write_text(text, encoding="cp1252", errors='replace')
+            except Exception as e:
+                if self.debug:
+                    print(f"[DEBUG] Error writing as cp1252, trying UTF-8: {e}")
+                file_path.write_text(text, encoding="utf-8")
 
     def import_module(self, file_path):
-        """Import a VBA module from file into Visio.
-        
-        This method ensures COM is initialized for thread safety,
-        as it may be called from file watcher threads.
-        """
-        # Initialize COM for this thread
+        """Import a VBA module from file into Visio"""
         com_initialized = False
         try:
             pythoncom.CoInitialize()
@@ -196,13 +172,11 @@ class VisioVBAImporter:
             if self.debug:
                 print(f"[DEBUG] COM initialized for import_module thread")
         except:
-            # Already initialized in this thread
             if self.debug:
                 print(f"[DEBUG] COM already initialized in this thread")
             pass
         
         try:
-            # Check connection before each import
             if not self._ensure_connection():
                 print("⚠️  No connection to Visio - make sure the document is open")
                 return False
@@ -224,13 +198,35 @@ class VisioVBAImporter:
                     break
             if component and component.Type == 100:
                 if self.force_document:
-                    code = file_path.read_text(encoding="utf-8")
+                    try:
+                        code = file_path.read_text(encoding="utf-8")
+                    except UnicodeDecodeError:
+                        code = file_path.read_text(encoding="cp1252", errors='replace')
                     code = self._strip_vba_header(code)
                     cm = component.CodeModule
                     if cm.CountOfLines > 0:
                         cm.DeleteLines(1, cm.CountOfLines)
                     if code.strip():
                         cm.AddFromString(code)
+                    
+                    try:
+                        new_text = file_path.read_text(encoding="cp1252", errors='replace')
+                        try:
+                            current_text = file_path.read_text(encoding="utf-8")
+                            if new_text != current_text:
+                                file_path.write_text(new_text, encoding="utf-8")
+                                if self.debug:
+                                    print(f"[DEBUG] Converted {file_path.name} back to UTF-8 (content changed)")
+                            elif self.debug:
+                                print(f"[DEBUG] Skipped conversion - content unchanged")
+                        except:
+                            file_path.write_text(new_text, encoding="utf-8")
+                            if self.debug:
+                                print(f"[DEBUG] Converted {file_path.name} to UTF-8")
+                    except Exception as e:
+                        if self.debug:
+                            print(f"[DEBUG] Error converting back to UTF-8: {e}")
+                    
                     print(f"✓ Imported: {target_doc_info.folder_name}/{file_path.name} (force)")
                     return True
                 else:
@@ -242,7 +238,27 @@ class VisioVBAImporter:
                 if self.debug:
                     print(f"[DEBUG] Removing existing module: {module_name}")
                 vb_project.VBComponents.Remove(component)
+                
             vb_project.VBComponents.Import(str(file_path))
+            
+            try:
+                new_text = file_path.read_text(encoding="cp1252", errors='replace')
+                try:
+                    current_text = file_path.read_text(encoding="utf-8")
+                    if new_text != current_text:
+                        file_path.write_text(new_text, encoding="utf-8")
+                        if self.debug:
+                            print(f"[DEBUG] Converted {file_path.name} back to UTF-8 (content changed)")
+                    elif self.debug:
+                        print(f"[DEBUG] Skipped conversion - content unchanged")
+                except:
+                    file_path.write_text(new_text, encoding="utf-8")
+                    if self.debug:
+                        print(f"[DEBUG] Converted {file_path.name} to UTF-8")
+            except Exception as e:
+                if self.debug:
+                    print(f"[DEBUG] Error converting back to UTF-8: {e}")
+            
             print(f"✓ Imported: {target_doc_info.folder_name}/{file_path.name}")
             return True
         except Exception as e:
@@ -252,7 +268,6 @@ class VisioVBAImporter:
                 traceback.print_exc()
             return False
         finally:
-            # Uninitialize COM if we initialized it
             if com_initialized:
                 try:
                     pythoncom.CoUninitialize()
