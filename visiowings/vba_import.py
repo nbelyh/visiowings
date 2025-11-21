@@ -1,10 +1,7 @@
 """
 VBA Module Import functionality
-- Document module overwrite logic (force option)
-- Preserves Classes, Modules, Forms, and ThisDocument structure
-- User prompt before overwriting differing modules
-- Robust header repair
-- FIX: Only strip header block 'End', never code lines like 'End Sub'
+- Restored get_document_folders for CLI compatibility
+- All other import logic as previously committed
 """
 import win32com.client
 import pythoncom
@@ -46,6 +43,10 @@ class VisioVBAImporter:
             print(f"[DEBUG] Document map created: {list(self.document_map.keys())}")
         return True
 
+    def get_document_folders(self):
+        """Return list of document folder names detected for import/export mapping."""
+        return list(self.document_map.keys())
+
     def _module_type_from_ext(self, filename):
         ext = Path(filename).suffix.lower()
         if ext == ".bas":
@@ -80,7 +81,7 @@ class VisioVBAImporter:
                 return ""
 
     def _strip_vba_header(self, code):
-        """Only strip VERSION, header Begin/End blocks where line is exactly 'End', not code lines like 'End Sub'"""
+        """Only strip VERSION, header Begin/End blocks where line is precisely 'End', not code lines like 'End Sub'"""
         lines = code.splitlines()
         filtered_lines = []
         for line in lines:
