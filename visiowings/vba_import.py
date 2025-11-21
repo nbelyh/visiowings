@@ -3,7 +3,8 @@ VBA Module Import functionality
 - Document module overwrite logic (force option)
 - Preserves Classes, Modules, Forms, and ThisDocument structure
 - User prompt before overwriting differing modules
-- Robust error handling and header repair
+- Robust header repair
+- FIX: Only strip header block 'End', never code lines like 'End Sub'
 """
 import win32com.client
 import pythoncom
@@ -78,6 +79,27 @@ class VisioVBAImporter:
             except Exception:
                 return ""
 
+    def _strip_vba_header(self, code):
+        """Only strip VERSION, header Begin/End blocks where line is exactly 'End', not code lines like 'End Sub'"""
+        lines = code.splitlines()
+        filtered_lines = []
+        for line in lines:
+            line_strip = line.strip()
+            if line_strip.startswith('VERSION'):
+                continue
+            if line_strip.startswith('Begin '):
+                continue
+            # Only strip lines that are precisely 'End' (not End Sub, End Function, etc)
+            if line_strip == 'End':
+                continue
+            # Remove Attribute lines except VB_Name
+            if line_strip.startswith('Attribute '):
+                if 'VB_Name' in line:
+                    filtered_lines.append(line)
+                continue
+            filtered_lines.append(line)
+        return '\n'.join(filtered_lines)
+
     def _prompt_overwrite(self, module_name, file_path, comp):
         file_code = self._read_module_code(file_path)
         visio_code = comp.CodeModule.Lines(1, comp.CodeModule.CountOfLines) if comp.CodeModule.CountOfLines > 0 else ""
@@ -92,13 +114,10 @@ class VisioVBAImporter:
 
     def import_directory(self, input_dir):
         input_dir = Path(input_dir)
-        # Structure: .../document_folder/Classes|Modules|Forms|VisioObjects/
         dirs = [d for d in input_dir.iterdir() if d.is_dir()]
         if not dirs:
-            # backward compat: single-document root
             dirs = [input_dir]
         for doc_dir in dirs:
-            # Structure inside doc_dir
             structure = {
                 "Modules": [],
                 "Classes": [],
@@ -111,7 +130,6 @@ class VisioVBAImporter:
                     continue
                 if subdir.name.lower() in ("modules", "classes", "forms", "visioobjects"):
                     structure[subdir.name.capitalize()].extend(subdir.glob("*.*"))
-            # fallback: find files in root (legacy style)
             for f in doc_dir.glob("*.bas"):
                 structure["Modules"].append(f)
             for f in doc_dir.glob("*.cls"):
@@ -121,7 +139,6 @@ class VisioVBAImporter:
                     structure["VisioObjects"].append(f)
             for f in doc_dir.glob("*.frm"):
                 structure["Forms"].append(f)
-            # Import order: Modules, Classes, Forms, VisioObjects (ThisDocument)
             for group in ("Modules", "Classes", "Forms", "VisioObjects"):
                 for file_path in structure[group]:
                     module_type = self._module_type_from_ext(file_path)
@@ -136,25 +153,25 @@ class VisioVBAImporter:
                         if comp.Name == module_name:
                             target_comp = comp
                             break
-                    # Optionally prompt user if overwriting
                     if target_comp is not None and group != "VisioObjects":
                         if not self._prompt_overwrite(module_name, file_path, target_comp):
                             print(f"⊘ Skipped: {module_name}")
                             continue
                         vb_project.VBComponents.Remove(target_comp)
-                    # Always ask for ThisDocument unless --force_document
                     if group == "VisioObjects" and target_comp is not None and not self.force_document:
                         print(f"⚠️  Document module '{module_name}' skipped without --force.")
                         continue
                     self._repair_vba_module_file(file_path)
                     try:
+                        orig_code = self._read_module_code(file_path)
+                        # Strip headers for current import, preserving End Sub, End Function, etc
+                        clean_code = self._strip_vba_header(orig_code)
+                        file_path.write_text(clean_code, encoding="cp1252", errors='replace')
                         vb_project.VBComponents.Import(str(file_path))
                         print(f"✓ Imported: {doc_dir.name}/{group}/{module_name}")
                     except Exception as e:
                         if group == "VisioObjects" and self.force_document and target_comp is not None:
-                            # Overwrite code in place
-                            with open(file_path, encoding='utf-8') as f:
-                                code = f.read()
+                            code = self._read_module_code(file_path)
                             cm = target_comp.CodeModule
                             cm.DeleteLines(1, cm.CountOfLines)
                             cm.AddFromString(code)
