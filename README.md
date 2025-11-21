@@ -28,6 +28,7 @@ VBA Editor for Microsoft Visio with VS Code integration – Edit Visio VBA modul
 - **Automatic change detection:** Smart, hash-based, and loop-proof
 - **Module deletion sync:** Remove modules in Visio when deleted in VS Code
 - **Modern VS Code features:** Line numbers, dark mode, search, shortcuts
+- **Safe import/export:** Robust comparison and header management prevents unwanted overwrites and import failures
 
 ## Why visiowings?
 Visio VBA Editor lacks modern tooling. visiowings brings:
@@ -35,6 +36,7 @@ Visio VBA Editor lacks modern tooling. visiowings brings:
 - Fast, bidirectional sync
 - Real Git integration
 - No more manual copy-paste or limited VBA interface
+- Safe cross-platform editing and importing of modules
 
 ---
 
@@ -107,6 +109,10 @@ visiowings export --file yourdoc.vsdm --output ./vba_modules
 visiowings import --file yourdoc.vsdm --input ./vba_modules --force
 ```
 
+### Safe Export & Import (NEW)
+- **Export:** Uses normalization and header-stripping to prevent accidental differences and overwriting. On conflict, user is prompted to overwrite, skip, or choose interactively.
+- **Import:** Before importing, headers are repaired and encoding normalized. Comments and Option Explicit are preserved. Document modules are handled safely (force option required).
+
 ### Command Reference
 | Option                 | Description                                                              |
 |------------------------|--------------------------------------------------------------------------|
@@ -125,6 +131,7 @@ visiowings import --file yourdoc.vsdm --input ./vba_modules --force
 - **Module deletion sync:** When enabled, `.bas`, `.cls`, `.frm` deletes in VS Code remove corresponding modules in Visio
 - **Smart change detection:** Only syncs when content changes; polling interval is optimized
 - **Bidirectional sync:** Changes in VS Code or Visio keep both in sync with the selected polling interval (default: 4 seconds)
+- **NEW: Safe Import/Export:** Content checks, normalization, encoding handling, and interactive user options ensure maximum safety
 
 ---
 
@@ -193,9 +200,11 @@ Visio → Options → Trust Center → Macro Settings → ☑ "Trust access to t
 
 ### Unicode/Encoding
 - Use UTF-8 in VS Code
+- **NEW:** All import/export routines auto-convert and normalize encoding for safe editing
 
 ### Document module updates
 - Use `--force` to update ThisDocument.cls modules
+- **NEW:** Document modules are handled with extra safety and user confirmation
 
 ---
 
@@ -207,6 +216,7 @@ Visio → Options → Trust Center → Macro Settings → ☑ "Trust access to t
 - [ ] Auto-backup before import
 - [ ] Diff viewer
 - [ ] `.visiowingsignore` file support
+- [ ] **Improve documentation with more advanced sync/import examples**
 
 ---
 
