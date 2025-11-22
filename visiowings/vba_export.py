@@ -58,20 +58,45 @@ class VisioVBAExporter:
         import re
         lines = text.splitlines()
         filtered_lines = []
+        in_begin_block = False
+        
         for line in lines:
             s = line.strip()
-            if s.startswith('VERSION') or s.startswith('MultiUse'):
+            
+            # Remove VERSION lines
+            if s.startswith('VERSION'):
                 continue
-            if re.match(r'^Begin( |\{)', s):
+            
+            # Detect BEGIN block (case-insensitive, with or without parameters)
+            if re.match(r'^BEGIN(\s|$)', s, re.IGNORECASE):
+                in_begin_block = True
                 continue
-            if s == 'End':
+            
+            # Detect END of BEGIN block (standalone END only)
+            if in_begin_block and re.match(r'^END$', s, re.IGNORECASE):
+                in_begin_block = False
                 continue
+            
+            # Skip everything inside BEGIN...END blocks
+            if in_begin_block:
+                continue
+            
+            # Remove standalone MultiUse lines (outside blocks too)
+            if s.startswith('MultiUse'):
+                continue
+            
+            # Handle Attribute lines
             if s.startswith('Attribute '):
                 if keep_vb_name and 'VB_Name' in line:
                     filtered_lines.append(line)
                 continue
+            
+            # Keep all other lines
             filtered_lines.append(line)
+        
         return '\n'.join(filtered_lines)
+
+
 
     def _strip_and_convert(self, file_path):
         # Read cp1252 (Visio export), clean headers, warn if transcoding loses data
@@ -112,25 +137,27 @@ class VisioVBAExporter:
         Returns: (are_different, local_hash, visio_hash)
         """
         try:
-            # Read local file
+            # Read local file and strip ALL headers for comparison
             local_content = local_path.read_text(encoding="utf-8")
+            local_normalized = self._strip_vba_header_export(local_content, keep_vb_name=False)  # ← False!
             
-            # Get Visio module content
+            # Get Visio module content and strip ALL headers for comparison
             cm = component.CodeModule
             if cm.CountOfLines > 0:
                 visio_content = cm.Lines(1, cm.CountOfLines)
             else:
                 visio_content = ""
+            visio_normalized = self._strip_vba_header_export(visio_content, keep_vb_name=False)  # ← False!
             
-            # Normalize both for comparison
-            local_normalized = self._normalize_content(local_content)
-            visio_normalized = self._normalize_content(visio_content)
+            # Further normalize whitespace
+            local_final = self._normalize_content(local_normalized)
+            visio_final = self._normalize_content(visio_normalized)
             
-            # Calculate hashes for debugging
-            local_hash = hashlib.md5(local_normalized.encode()).hexdigest()[:8]
-            visio_hash = hashlib.md5(visio_normalized.encode()).hexdigest()[:8]
+            # Calculate hashes
+            local_hash = hashlib.md5(local_final.encode()).hexdigest()[:8]
+            visio_hash = hashlib.md5(visio_final.encode()).hexdigest()[:8]
             
-            are_different = local_normalized != visio_normalized
+            are_different = local_final != visio_final
             
             if self.debug and are_different:
                 print(f"[DEBUG] Content differs: {local_path.name}")
@@ -142,8 +169,8 @@ class VisioVBAExporter:
         except Exception as e:
             if self.debug:
                 print(f"[DEBUG] Error comparing {local_path.name}: {e}")
-            # On error, assume different to be safe
             return True, None, None
+
     
     def _export_document_modules(self, doc_info, output_dir, last_hash=None):
         try:
@@ -226,12 +253,39 @@ class VisioVBAExporter:
                     # Interactive mode
                     for fname, info in files_with_changes.items():
                         print(f"\n{doc_info.folder_name}/{fname}")
-                        if self.debug:
-                            print(f"  Local:  {info['local_hash']}")
-                            print(f"  Visio:  {info['visio_hash']}")
+                        
+                        # Read local file and normalize WITHOUT VB_Name for fair comparison
+                        local_content = info['path'].read_text(encoding="utf-8")
+                        local_clean = self._strip_vba_header_export(local_content, keep_vb_name=False)  # ← False!
+                        
+                        # Get Visio content and normalize WITHOUT VB_Name for fair comparison
+                        visio_code = info['component'].CodeModule
+                        if visio_code.CountOfLines > 0:
+                            visio_content = visio_code.Lines(1, visio_code.CountOfLines)
+                        else:
+                            visio_content = ""
+                        visio_clean = self._strip_vba_header_export(visio_content, keep_vb_name=False)  # ← False!
+                        
+                        # Show diff of actual code (without VB_Name on either side)
+                        if local_clean.strip() != visio_clean.strip():
+                            diff_lines = list(
+                                difflib.unified_diff(
+                                    local_clean.splitlines(),
+                                    visio_clean.splitlines(),
+                                    fromfile="Local",
+                                    tofile="Visio",
+                                    lineterm=""
+                                )
+                            )
+                            if diff_lines:
+                                print('\n'.join(diff_lines))
+                        
                         choice = input(f"  Overwrite? (y/N): ").strip().lower()
                         if choice not in ('y', 'yes'):
                             files_to_skip.add(fname)
+
+
+
                 else:
                     # Cancel (default)
                     print(f"❌ Export cancelled for {doc_info.name}")
@@ -257,7 +311,7 @@ class VisioVBAExporter:
                 
                 # Export the module
                 component.Export(str(file_path))
-                if component.Type in [1, 2, 100]:
+                if component.Type in [1, 2, 3, 100]:
                     self._strip_and_convert(file_path)
                 exported_files.append(file_path)
                 visio_module_names.add(component.Name.lower())
