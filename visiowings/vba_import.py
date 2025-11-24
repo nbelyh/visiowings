@@ -51,15 +51,21 @@ class VisioVBAImporter:
             return self.connect_to_visio()
 
     def _find_document_for_file(self, file_path):
+        """
+        Returns the Visio document object associated with this file, based on parent folder.
+        If no matching document is open, returns None and warns the user.
+        """
         parent_dir = file_path.parent.name
         if parent_dir in self.document_map:
             if self.debug:
                 print(f"[DEBUG] File {file_path.name} belongs to document: {parent_dir}")
             return self.document_map[parent_dir]
-        main_doc_info = self.doc_manager.get_main_document()
-        if self.debug:
-            print(f"[DEBUG] File {file_path.name} assigned to main document")
-        return main_doc_info
+        else:
+            print(
+                f"⚠️  No open Visio document found for folder '{parent_dir}'; "
+                f"skipping import of '{file_path.name}' from this folder!"
+            )
+            return None
 
     def _create_temp_cp1252_file(self, file_path):
         import tempfile
@@ -184,6 +190,10 @@ class VisioVBAImporter:
         return "unknown"
 
     def _repair_vba_module_file(self, file_path):
+        # Only repair .bas headers. Do not touch .cls/.frm content.
+        ext = file_path.suffix.lower()
+        if ext != '.bas':
+            return True
         try:
             text = file_path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
@@ -207,29 +217,91 @@ class VisioVBAImporter:
                 return ""
 
     def _strip_vba_header(self, code, keep_vb_name=False):
-        """Strip VBA headers. For comparison, strip ALL attributes including VB_Name."""
+        """Strip VBA headers with proper handling of classes and forms.
+        
+        This function removes VBA IDE metadata while preserving actual code:
+        - VERSION lines
+        - BEGIN...End blocks (including nested blocks in forms/classes)
+        - MultiUse declarations
+        - Attribute lines (except VB_Name when keep_vb_name=True)
+        
+        Args:
+            code: VBA code text to process
+            keep_vb_name: If True, preserves Attribute VB_Name line
+            
+        Returns:
+            Cleaned VBA code with headers removed
+        """
         lines = code.splitlines()
         filtered_lines = []
+        begin_depth = 0  # Track nesting depth of BEGIN blocks
+        
+        # VBA code keywords that end with 'End' (case-insensitive)
+        code_end_keywords = {
+            'end sub', 'end function', 'end property', 'end if', 
+            'end with', 'end select', 'end type', 'end enum'
+        }
+        
         for line in lines:
-            line_strip = line.strip()
-            if line_strip.startswith('VERSION'):
+            s = line.strip()
+            s_lower = s.lower()
+            
+            # Remove VERSION lines
+            if s.upper().startswith('VERSION'):
                 continue
-            if line_strip.startswith('Begin '):
+            
+            # Detect BEGIN block start (with any parameters)
+            # Matches: BEGIN, BEGIN VB.Form, BEGIN {GUID} ControlName, etc.
+            if re.match(r'^BEGIN\s+', s, re.IGNORECASE) or s_lower == 'begin':
+                begin_depth += 1
+                if self.debug:
+                    print(f"[DEBUG] BEGIN detected (depth={begin_depth}): {s[:50]}")
                 continue
-            if line_strip == 'End':
+            
+            # Detect END of BEGIN block
+            # Must be standalone 'End' or 'End Begin', not 'End Sub', 'End Function', etc.
+            if begin_depth > 0:
+                # Check if this is a block terminator END (not a code keyword)
+                is_block_end = (
+                    s_lower == 'end' or 
+                    s_lower == 'end begin' or
+                    (s_lower.startswith('end ') and s_lower not in code_end_keywords and 
+                     not any(s_lower.startswith(kw) for kw in code_end_keywords))
+                )
+                
+                if is_block_end:
+                    begin_depth -= 1
+                    if self.debug:
+                        print(f"[DEBUG] END detected (depth={begin_depth}): {s[:50]}")
+                    continue
+            
+            # Skip everything inside BEGIN...End blocks
+            if begin_depth > 0:
                 continue
-            # Remove Attribute lines
-            if line_strip.startswith('Attribute '):
+            
+            # Remove standalone MultiUse lines (outside blocks)
+            if s_lower.startswith('multiuse'):
+                continue
+            
+            # Handle Attribute lines
+            if s.startswith('Attribute '):
                 if keep_vb_name and 'VB_Name' in line:
                     filtered_lines.append(line)
                 continue
+            
+            # Keep all other lines (actual code)
             filtered_lines.append(line)
+        
+        if self.debug and begin_depth != 0:
+            print(f"[DEBUG] Warning: Unbalanced BEGIN/End blocks (final depth={begin_depth})")
+        
         return '\n'.join(filtered_lines)
 
 
     def _prompt_overwrite(self, module_name, file_path, comp, edit_mode=False):
         """Compare module content, ignoring ALL Attribute differences for comparison"""
-        print(f"[DEBUG] Overwrite prompt called, edit_mode={edit_mode}")
+        if self.debug:
+            print(f"[DEBUG] Overwrite prompt called, edit_mode={edit_mode}")
         if edit_mode:
             return True  # Always overwrite in edit mode, don't prompt
         
