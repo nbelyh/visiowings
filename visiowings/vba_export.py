@@ -140,19 +140,30 @@ class VisioVBAExporter:
 
     def _strip_and_convert(self, file_path):
         # Read cp1252 (Visio export), clean headers, warn if transcoding loses data
-        try:
-            raw = Path(file_path).read_text(encoding="cp1252")
-            cleaned = self._strip_vba_header_export(raw, keep_vb_name=True)
+        # Only strip headers for .bas; preserve headers for .cls/.frm
+        ext = file_path.suffix.lower()
+        if ext == '.bas':
             try:
-                cleaned.encode('utf-8')  # if this errors, warn below
-            except UnicodeEncodeError as e:
-                print(f"⚠️  Warning: {file_path.name} contains characters not representable in utf-8: {e}")
-            Path(file_path).write_text(cleaned, encoding="utf-8")
-            return cleaned
-        except Exception as e:
-            print(f"⚠️  Encoding or cleaning error for {file_path}: {e}")
-            return None
-        
+                raw = Path(file_path).read_text(encoding="cp1252")
+                cleaned = self._strip_vba_header_export(raw, keep_vb_name=True)
+                try:
+                    cleaned.encode('utf-8')
+                except UnicodeEncodeError as e:
+                    print(f"⚠️  Warning: {file_path.name} contains characters not representable in utf-8: {e}")
+                Path(file_path).write_text(cleaned, encoding="utf-8")
+                return cleaned
+            except Exception as e:
+                print(f"⚠️  Encoding or cleaning error for {file_path}: {e}")
+                return None
+        else:
+            # For .cls and .frm: just convert encoding, don't touch contents
+            try:
+                raw = Path(file_path).read_text(encoding="cp1252")
+                Path(file_path).write_text(raw, encoding="utf-8")
+                return raw
+            except Exception as e:
+                print(f"⚠️  Encoding or cleaning error for {file_path}: {e}")
+                return None        
 
     def _module_content_hash(self, vb_project):
         try:

@@ -51,15 +51,21 @@ class VisioVBAImporter:
             return self.connect_to_visio()
 
     def _find_document_for_file(self, file_path):
+        """
+        Returns the Visio document object associated with this file, based on parent folder.
+        If no matching document is open, returns None and warns the user.
+        """
         parent_dir = file_path.parent.name
         if parent_dir in self.document_map:
             if self.debug:
                 print(f"[DEBUG] File {file_path.name} belongs to document: {parent_dir}")
             return self.document_map[parent_dir]
-        main_doc_info = self.doc_manager.get_main_document()
-        if self.debug:
-            print(f"[DEBUG] File {file_path.name} assigned to main document")
-        return main_doc_info
+        else:
+            print(
+                f"⚠️  No open Visio document found for folder '{parent_dir}'; "
+                f"skipping import of '{file_path.name}' from this folder!"
+            )
+            return None
 
     def _create_temp_cp1252_file(self, file_path):
         import tempfile
@@ -184,6 +190,10 @@ class VisioVBAImporter:
         return "unknown"
 
     def _repair_vba_module_file(self, file_path):
+        # Only repair .bas headers. Do not touch .cls/.frm content.
+        ext = file_path.suffix.lower()
+        if ext != '.bas':
+            return True
         try:
             text = file_path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
